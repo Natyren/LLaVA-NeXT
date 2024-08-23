@@ -27,7 +27,6 @@ accelerate launch \
     --mm_projector_type mlp2x_gelu \
     --mm_use_im_start_end False \
     --mm_use_im_patch_token False \
-    --bf16 True \
     --output_dir /checkpoints/projectors/${BASE_RUN_NAME} \
     --num_train_epochs 1 \
     --per_device_train_batch_size 16 \
@@ -41,7 +40,6 @@ accelerate launch \
     --warmup_ratio 0.03 \
     --lr_scheduler_type "cosine" \
     --logging_steps 1 \
-    --tf32 True \
     --model_max_length 8192 \
     --gradient_checkpointing True \
     --dataloader_num_workers 16 \
