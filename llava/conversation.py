@@ -260,7 +260,7 @@ class Conversation:
                     else:
                         msg = re.sub(r"(<image>)\n(?=<image>)", r"\1 ", msg)
 
-                    img_str_list = []                         
+                    img_str_list = []
                     for img in image:
                         if self.is_image_file(img):
                             img_b64_str = self.process_image(img, "Default", return_pil=False, image_format="JPEG")
@@ -383,8 +383,8 @@ conv_llava_llama_3 = Conversation(
     offset=0,
     sep="<|eot_id|>",
     sep_style=SeparatorStyle.LLAMA_3,
-    tokenizer_id="meta-llama/Meta-Llama-3-8B-Instruct",
-    tokenizer=AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B-Instruct"),
+    tokenizer_id="maum-ai/Llama-3-MAAL-8B-Instruct-v0.1",
+    tokenizer=AutoTokenizer.from_pretrained("maum-ai/Llama-3-MAAL-8B-Instruct-v0.1"),
     stop_token_ids=[128009],
 )
 
