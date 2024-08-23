@@ -114,6 +114,7 @@ class ModelArguments:
 
 @dataclass
 class DataArguments:
+    use_blip558k: bool = False
     data_path: str = field(default=None, metadata={"help": "Path to the training data, in llava's instruction.json format. Supporting multiple json files via /path/to/{a,b,c}.json"})
     lazy_preprocess: bool = False
     is_multimodal: bool = False
