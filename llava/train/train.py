@@ -46,6 +46,8 @@ from llava import conversation as conversation_lib
 from llava.model import *
 from llava.mm_utils import process_highres_image, process_anyres_image, process_highres_image_crop_split, tokenizer_image_token
 from llava.utils import rank0_print, process_video_with_pyav, process_video_with_decord
+from datasets import load_dataset
+import PIL
 
 torch.multiprocessing.set_sharing_strategy("file_system")
 
@@ -106,7 +108,6 @@ class ModelArguments:
 
     use_pos_skipping: Optional[bool] = field(default=False)
     pos_skipping_range: Optional[int] = field(default=4096)
-
 
     mm_newline_position: Optional[str] = field(default="one_token")
 
@@ -565,7 +566,7 @@ def preprocess_qwen(sources, tokenizer: transformers.PreTrainedTokenizer, has_im
     image_token_index = tokenizer.convert_tokens_to_ids("<image>")
     im_start, im_end = tokenizer.additional_special_tokens_ids
     # unmask_tokens = ["<|im_start|>", "<|im_start|>", "\n"]
-    unmask_tokens_idx =  [198, im_start, im_end]
+    unmask_tokens_idx = [198, im_start, im_end]
     nl_tokens = tokenizer("\n").input_ids
 
     # Reset Qwen chat templates so that it won't include system message every time we apply
@@ -586,7 +587,7 @@ def preprocess_qwen(sources, tokenizer: transformers.PreTrainedTokenizer, has_im
 
         # New version, use apply chat template
         # Build system message for each sentence
-        input_id += tokenizer.apply_chat_template([{"role" : "system", "content" : system_message}])
+        input_id += tokenizer.apply_chat_template([{"role": "system", "content": system_message}])
         target += [IGNORE_INDEX] * len(input_id)
 
         for conv in source:
@@ -598,18 +599,16 @@ def preprocess_qwen(sources, tokenizer: transformers.PreTrainedTokenizer, has_im
                 role = conv["from"]
                 content = conv["value"]
 
-            role =  roles.get(role, role)
-            
-            conv = [{"role" : role, "content" : content}]
+            role = roles.get(role, role)
+
+            conv = [{"role": role, "content": content}]
             encode_id = tokenizer.apply_chat_template(conv)
             input_id += encode_id
             if role in ["user", "system"]:
                 target += [IGNORE_INDEX] * len(encode_id)
             else:
                 target += encode_id
-        
 
-                    
         assert len(input_id) == len(target), f"{len(input_id)} != {len(target)}"
         for idx, encode_id in enumerate(input_id):
             if encode_id in unmask_tokens_idx:
@@ -671,7 +670,7 @@ def preprocess_llama3(
 
         # New version, use apply chat template
         # Build system message for each sentence
-        input_id += tokenizer.apply_chat_template([{"role" : "system", "content" : system_message}])
+        input_id += tokenizer.apply_chat_template([{"role": "system", "content": system_message}])
         target += [IGNORE_INDEX] * len(input_id)
 
         for conv in source:
@@ -683,9 +682,9 @@ def preprocess_llama3(
                 role = conv["from"]
                 content = conv["value"]
 
-            role =  roles.get(role, role)
-            
-            conv = [{"role" : role, "content" : content}]
+            role = roles.get(role, role)
+
+            conv = [{"role": role, "content": content}]
             # First is bos token we don't need here
             encode_id = tokenizer.apply_chat_template(conv)[1:]
             input_id += encode_id
@@ -693,9 +692,7 @@ def preprocess_llama3(
                 target += [IGNORE_INDEX] * len(encode_id)
             else:
                 target += encode_id
-        
 
-                    
         assert len(input_id) == len(target), f"{len(input_id)} != {len(target)}"
         for idx, encode_id in enumerate(input_id):
             if encode_id in unmask_tokens_idx:
@@ -951,9 +948,12 @@ class LazySupervisedDataset(Dataset):
         super(LazySupervisedDataset, self).__init__()
         self.tokenizer = tokenizer
         self.list_data_dict = []
+        if data_args.use_blip558k:
+            dataset = load_dataset("lmms-lab/LLaVA-ReCap-558K", "default", split="train", streaming=True)
+            self.list_data_dict = iter(dataset)
 
         # Handle multiple JSON files specified in the data_path
-        if "{" in data_path and "}" in data_path:
+        elif "{" in data_path and "}" in data_path:
             base_path, file_pattern = re.match(r"^(.*)\{(.*)\}\.json$", data_path).groups()
             file_names = file_pattern.split(",")
             rank0_print(f"Loading {file_names} from {base_path}")
@@ -1029,7 +1029,20 @@ class LazySupervisedDataset(Dataset):
         self.data_args = data_args
 
     def __len__(self):
+        if self.data_args.use_blip558k:
+            return 558000
         return len(self.list_data_dict)
+
+    def __iter__(self):
+        self.index = 0
+        return self
+
+    def __next__(self):
+        if self.index >= len(self.list_data_dict):
+            raise StopIteration
+        item = self._get_item(self.index)
+        self.index += 1
+        return item
 
     @property
     def lengths(self):
@@ -1055,11 +1068,14 @@ class LazySupervisedDataset(Dataset):
         image_folder = self.data_args.image_folder
         processor = self.data_args.image_processor
         # print(f"\n\nInspecting the image path, folder = {image_folder}, image={image_file}\n\n")
-        try:
-            image = Image.open(os.path.join(image_folder, image_file)).convert("RGB")
-        except Exception as exn:
-            print(f"Failed to open image {image_file}. Exception:", exn)
-            raise exn
+        if isinstance(image_file, PIL.Image.Image):
+            image = image_file
+        else:
+            try:
+                image = Image.open(os.path.join(image_folder, image_file)).convert("RGB")
+            except Exception as exn:
+                print(f"Failed to open image {image_file}. Exception:", exn)
+                raise exn
 
         image_size = image.size
         image_aspect_ratio = self.data_args.image_aspect_ratio
@@ -1126,17 +1142,21 @@ class LazySupervisedDataset(Dataset):
             raise e
 
     def _get_item(self, i) -> Dict[str, torch.Tensor]:
-        sources = self.list_data_dict[i]
+        if self.data_args.use_blip558k:
+            sources = [next(self.list_data_dict)]
+        else:
+            sources = self.list_data_dict[i]
+
         if isinstance(i, int):
             sources = [sources]
         assert len(sources) == 1, "Don't know why it is wrapped to a list"  # FIXME
 
         if "image" in sources[0]:
-            image_file = self.list_data_dict[i]["image"]
+            image_file = sources[0]["image"]
             if type(image_file) is list:
                 image = [self.process_image(f) for f in image_file]
                 # Handling multi images
-                # overwrite to process with simple pad 
+                # overwrite to process with simple pad
                 if len(image_file) > 1:
                     image = [self.process_image(f, "pad") for f in image_file]
                     image = [[im[0], im[1], "image"] for im in image]
@@ -1186,8 +1206,8 @@ class LazySupervisedDataset(Dataset):
         else:
             sources = copy.deepcopy([e["conversations"] for e in sources])
 
-        has_image = ("image" in self.list_data_dict[i]) or ("video" in self.list_data_dict[i])
-        data_dict = preprocess(sources, self.tokenizer, has_image=has_image)
+        # has_image = ("image" in self.list_data_dict[i]) or ("video" in self.list_data_dict[i])
+        data_dict = preprocess(sources, self.tokenizer, has_image=True)
 
         if "prompt" in data_dict:
             prompt = data_dict["prompt"]
@@ -1198,16 +1218,16 @@ class LazySupervisedDataset(Dataset):
             data_dict = dict(input_ids=data_dict["input_ids"][0], labels=data_dict["labels"][0])
 
         # image exist in the data
-        if "image" in self.list_data_dict[i]:
-            data_dict["image"] = image
-        elif "video" in self.list_data_dict[i]:
-            data_dict["image"] = image
-        elif self.data_args.is_multimodal:
-            # image does not exist in the data, but the model is multimodal
-            crop_size = self.data_args.image_processor.crop_size
-            data_dict["image"] = [
-                (torch.zeros(1, 3, crop_size["height"], crop_size["width"]), (crop_size["width"], crop_size["height"]), "text"),
-            ]
+        # if "image" in self.list_data_dict[i]:
+        data_dict["image"] = image
+        # elif "video" in self.list_data_dict[i]:
+        #     data_dict["image"] = image
+        # elif self.data_args.is_multimodal:
+        #     # image does not exist in the data, but the model is multimodal
+        #     crop_size = self.data_args.image_processor.crop_size
+        #     data_dict["image"] = [
+        #         (torch.zeros(1, 3, crop_size["height"], crop_size["width"]), (crop_size["width"], crop_size["height"]), "text"),
+        #     ]
         # prompt exist in the data
         if prompt is not None:
             data_dict["prompt"] = prompt
@@ -1238,7 +1258,7 @@ class DataCollatorForSupervisedDataset(object):
         labels = [_labels[: self.tokenizer.model_max_length] for _labels in labels]
         if self.tokenizer.pad_token_id is None:
             # self.tokenizer.pad_token_id = self.tokenizer.eos_token_id  # FIXME: this could only be triggered for llama3 model.
-            self.tokenizer.pad_token_id = 0 # This gets the best result. Don't know why.
+            self.tokenizer.pad_token_id = 0  # This gets the best result. Don't know why.
         input_ids = self.pad_sequence(input_ids, batch_first=True, padding_value=self.tokenizer.pad_token_id)
         labels = self.pad_sequence(labels, batch_first=True, padding_value=IGNORE_INDEX)
         batch = dict(input_ids=input_ids, labels=labels.long() if labels.dtype == torch.int32 else labels, attention_mask=input_ids.ne(self.tokenizer.pad_token_id))
@@ -1252,8 +1272,8 @@ class DataCollatorForSupervisedDataset(object):
             images = [im[0] for im_list in images for im in im_list]
 
             # if all(x is not None and x.shape == images[0].shape for x in images):
-                # Image: (N, P, C, H, W)
-                # Video: (N, F, C, H, W)
+            # Image: (N, P, C, H, W)
+            # Video: (N, F, C, H, W)
             #     batch["images"] = torch.stack(images)
             # else:
             batch["images"] = images
@@ -1266,6 +1286,7 @@ class DataCollatorForSupervisedDataset(object):
 
 def make_supervised_data_module(tokenizer: transformers.PreTrainedTokenizer, data_args) -> Dict:
     """Make dataset and collator for supervised fine-tuning."""
+
     train_dataset = LazySupervisedDataset(tokenizer=tokenizer, data_path=data_args.data_path, data_args=data_args)
     data_collator = DataCollatorForSupervisedDataset(tokenizer=tokenizer)
     return dict(train_dataset=train_dataset, eval_dataset=None, data_collator=data_collator)
