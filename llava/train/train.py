@@ -1388,6 +1388,7 @@ def get_model(model_args, training_args, bnb_model_from_pretrained_args):
         elif (
             "wizardlm-2" in model_args.model_name_or_path.lower()
             or "vicuna" in model_args.model_name_or_path.lower()
+            or "vikhr" in model_args.model_name_or_path.lower()
             or "llama" in model_args.model_name_or_path.lower()
             or "yi" in model_args.model_name_or_path.lower()
             or "nous-hermes" in model_args.model_name_or_path.lower()
