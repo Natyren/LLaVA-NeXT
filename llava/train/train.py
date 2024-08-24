@@ -1538,6 +1538,7 @@ def train(attn_implementation=None):
         "wizardlm-2" in model_args.model_name_or_path.lower()
         or "vicuna" in model_args.model_name_or_path.lower()
         or "llama" in model_args.model_name_or_path.lower()
+        or "vikhr" in model_args.model_name_or_path.lower()
         or "yi" in model_args.model_name_or_path.lower()
         or "nous-hermes" in model_args.model_name_or_path.lower()
         and "wizard-2" in model_args.model_name_or_path.lower()
