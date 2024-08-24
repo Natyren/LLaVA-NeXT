@@ -1145,7 +1145,7 @@ class LazySupervisedDataset(Dataset):
 
     def _get_item(self, i) -> Dict[str, torch.Tensor]:
         if self.data_args.use_blip558k:
-            sources = [next(self.list_data_dict)]
+            sources = next(self.list_data_dict)
         else:
             sources = self.list_data_dict[i]
 
