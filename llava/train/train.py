@@ -1111,36 +1111,37 @@ class LazySupervisedDataset(Dataset):
 
     def __getitem__(self, i) -> Dict[str, torch.Tensor]:
         # TODO: define number of retries somewhere else
-        num_base_retries = 3
-        num_final_retries = 300
+        # num_base_retries = 3
+        # num_final_retries = 300
+        sample = self._get_item(i)
+        return sample
+        # # try the current sample first
+        # for attempt_idx in range(num_base_retries):
+        #     try:
+        #         sample = self._get_item(i)
+        #         return sample
+        #     except Exception as e:
+        #         # sleep 1s in case it is a cloud disk issue
+        #         print(f"[Try #{attempt_idx}] Failed to fetch sample {i}. Exception:", e)
+        #         time.sleep(1)
 
-        # try the current sample first
-        for attempt_idx in range(num_base_retries):
-            try:
-                sample = self._get_item(i)
-                return sample
-            except Exception as e:
-                # sleep 1s in case it is a cloud disk issue
-                print(f"[Try #{attempt_idx}] Failed to fetch sample {i}. Exception:", e)
-                time.sleep(1)
+        # # try other samples, in case it is file corruption issue
+        # for attempt_idx in range(num_base_retries):
+        #     try:
+        #         next_index = min(i + 1, len(self.list_data_dict) - 1)
+        #         # sample_idx = random.choice(range(len(self)))
+        #         sample = self._get_item(next_index)
+        #         return sample
+        #     except Exception as e:
+        #         # no need to sleep
+        #         print(f"[Try other #{attempt_idx}] Failed to fetch sample {next_index}. Exception:", e)
+        #         pass
 
-        # try other samples, in case it is file corruption issue
-        for attempt_idx in range(num_base_retries):
-            try:
-                next_index = min(i + 1, len(self.list_data_dict) - 1)
-                # sample_idx = random.choice(range(len(self)))
-                sample = self._get_item(next_index)
-                return sample
-            except Exception as e:
-                # no need to sleep
-                print(f"[Try other #{attempt_idx}] Failed to fetch sample {next_index}. Exception:", e)
-                pass
-
-        try:
-            sample = self._get_item(i)
-            return sample
-        except Exception as e:
-            raise e
+        # try:
+        #     sample = self._get_item(i)
+        #     return sample
+        # except Exception as e:
+        #     raise e
 
     def _get_item(self, i) -> Dict[str, torch.Tensor]:
         if self.data_args.use_blip558k:
