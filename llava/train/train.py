@@ -1024,7 +1024,7 @@ class LazySupervisedDataset(Dataset):
                 rank0_print(f"Loaded {len(cur_data_dict)} samples from {data_path}")
                 self.list_data_dict.extend(cur_data_dict)
 
-        rank0_print(f"Loaded {len(self.list_data_dict)} samples from {data_path}")
+        rank0_print(f"Loaded 558000 samples from {data_path}")
         rank0_print("Formatting inputs...Skip in lazy mode")
         self.tokenizer = tokenizer
         self.data_args = data_args
@@ -1039,7 +1039,7 @@ class LazySupervisedDataset(Dataset):
         return self
 
     def __next__(self):
-        if self.index >= len(self.list_data_dict):
+        if self.index >= 558000:
             raise StopIteration
         item = self._get_item(self.index)
         self.index += 1
