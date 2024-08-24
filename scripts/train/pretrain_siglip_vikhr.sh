@@ -27,7 +27,7 @@ accelerate launch \
     --mm_projector_type mlp2x_gelu \
     --mm_use_im_start_end False \
     --mm_use_im_patch_token False \
-    --output_dir /checkpoints/projectors/${BASE_RUN_NAME} \
+    --output_dir ./checkpoints/projectors/${BASE_RUN_NAME} \
     --num_train_epochs 1 \
     --per_device_train_batch_size 16 \
     --per_device_eval_batch_size 4 \
